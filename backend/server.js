@@ -9,9 +9,17 @@ const Room = require('./models/Room');
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, { cors: { origin: 'http://localhost:5173', credentials: true } });
 
-app.use(cors({ origin: 'http://localhost:5173', credentials: true }));
+const allowedOrigins = [
+  'http://localhost:5173',
+  process.env.FRONTEND_URL
+].filter(Boolean);
+
+const io = new Server(server, {
+  cors: { origin: allowedOrigins, credentials: true }
+});
+
+app.use(cors({ origin: allowedOrigins, credentials: true }));
 app.use(express.json());
 
 app.use('/api/auth', require('./routes/auth'));
@@ -42,7 +50,12 @@ io.on('connection', (socket) => {
 
   socket.on('send-message', async ({ roomId, text }) => {
     try {
-      const msg = { sender: socket.user.id, senderName: socket.user.username, text, timestamp: new Date() };
+      const msg = {
+        sender: socket.user.id,
+        senderName: socket.user.username,
+        text,
+        timestamp: new Date()
+      };
       await Room.findByIdAndUpdate(roomId, { $push: { messages: msg } });
       io.to(roomId).emit('new-message', msg);
     } catch (err) {
@@ -51,14 +64,24 @@ io.on('connection', (socket) => {
   });
 
   socket.on('session-started', ({ roomId, startTime }) => {
-    socket.to(roomId).emit('session-started', { startTime, startedBy: socket.user.username });
+    socket.to(roomId).emit('session-started', {
+      startTime,
+      startedBy: socket.user.username
+    });
   });
 
   socket.on('session-ended', ({ roomId, duration }) => {
-    socket.to(roomId).emit('session-ended', { duration, endedBy: socket.user.username });
+    socket.to(roomId).emit('session-ended', {
+      duration,
+      endedBy: socket.user.username
+    });
   });
 });
 
 mongoose.connect(process.env.MONGO_URI)
-  .then(() => server.listen(process.env.PORT, () => console.log(`Server running on port ${process.env.PORT}`)))
-  .catch(err => console.error(err));
+  .then(() =>
+    server.listen(process.env.PORT || 5000, () =>
+      console.log(`Server running on port ${process.env.PORT || 5000}`)
+    )
+  )
+  .catch(err => console.error('MongoDB connection error:', err));
